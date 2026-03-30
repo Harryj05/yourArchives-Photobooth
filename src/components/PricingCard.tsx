@@ -8,7 +8,6 @@ interface PricingFeature {
 interface PricingCardProps {
   title: string;
   price: string;
-  period?: string;
   description: string;
   features: PricingFeature[];
   isPopular?: boolean;
@@ -19,7 +18,6 @@ interface PricingCardProps {
 export default function PricingCard({
   title,
   price,
-  period = "/month",
   description,
   features,
   isPopular = false,

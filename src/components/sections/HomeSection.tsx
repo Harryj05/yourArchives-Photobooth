@@ -317,9 +317,16 @@ export default function HomeSection({
                     {isPrinting && capturedPhotos.length > 0 && !isSlotDetailOpen && (
                       <motion.div
                         layoutId="photostrip-element"
-                        initial={{ y: -450, rotateZ: 10, x: 20 }}
+                        initial={{ y: -600, rotateZ: 15, x: 30, opacity: 0 }}
                         animate={{ y: 52, rotateZ: -25, x: -15, scale: 1, opacity: 1 }}
-                        transition={{ duration: 3, ease: [0.34, 1.56, 0.64, 1], delay: 0.2 }}
+                        transition={{ 
+                          duration: 1.8, 
+                          ease: [0.33, 1, 0.68, 1], // Power4 Out for gravity feel
+                          type: "spring",
+                          stiffness: 70,
+                          damping: 12,
+                          delay: 0.2
+                        }}
                         onClick={(e) => { e.stopPropagation(); handleSlotClick(); }}
                         className="absolute w-[32%] p-1 bg-white flex flex-col overflow-hidden cursor-pointer hover:scale-[1.1] z-10"
                         style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.9)', aspectRatio: capturedLayout === 3 ? "1/3.5" : "1/4.5" }}
@@ -460,12 +467,12 @@ export default function HomeSection({
             <div className="absolute top-8 right-8 z-[110]">
               <button 
                 onClick={() => { setIsSlotDetailOpen(false); setTransitionStage("landing"); }}
-                className="group flex items-center gap-4 bg-white/10 hover:bg-white/20 p-2 pr-6 rounded-full border border-white/20 transition-all active:scale-95"
+                className="group flex items-center gap-4 bg-white/15 hover:bg-white/25 p-2 pr-6 rounded-full border border-white/20 transition-colors duration-200 active:scale-95 ease-out"
               >
-                <div className="w-10 h-10 rounded-full bg-zinc-950 flex items-center justify-center text-white scale-90 group-hover:scale-100 transition-transform">
+                <div className="w-10 h-10 rounded-full bg-zinc-950 flex items-center justify-center text-white scale-90 group-hover:scale-105 transition-transform duration-200 ease-out">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
                 </div>
-                <span className="font-sans font-bold text-zinc-900 tracking-widest uppercase text-sm">Close Chamber</span>
+                <span className="font-sans font-bold text-zinc-950 tracking-widest uppercase text-[11px]">Close Chamber</span>
               </button>
             </div>
 
@@ -633,6 +640,7 @@ export default function HomeSection({
             <div className="flex flex-col gap-8 w-full">
               {capturedPhotos.map((photo, i) => (
                 <div key={i} className="relative w-full aspect-square border-[12px] border-white shadow-sm overflow-hidden bg-zinc-50">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={photo} className={`w-full h-full object-cover ${capturedFilter === 'bw' ? 'grayscale contrast-125' : ''}`} alt="" />
                 </div>
               ))}

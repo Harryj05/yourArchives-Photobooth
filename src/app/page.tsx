@@ -96,13 +96,13 @@ export default function Home() {
 
       <div className="relative w-full h-full flex items-center justify-center">
         <div className="relative w-full h-full max-w-[1440px] mx-auto px-6 md:px-12 flex items-center justify-center">
-          <AnimatePresence>
+          <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={activeSection}
-              initial={{ opacity: 0, scale: 0.95, filter: "blur(8px)" }}
+              initial={{ opacity: 1, scale: 1 }}
               animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
               exit={{ opacity: 0, scale: 1.05, filter: "blur(8px)" }}
-              transition={{ duration: 1.0, ease: [0.4, 0, 0.2, 1] }}
+              transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
               className="absolute inset-0 w-full h-full flex items-center justify-center"
             >
               <div className="w-full h-full relative overflow-hidden flex items-center justify-center">

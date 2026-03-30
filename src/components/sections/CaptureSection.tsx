@@ -13,7 +13,6 @@ export default function CaptureSection({ layout, onComplete }: CaptureSectionPro
   const [currentShot, setCurrentShot] = useState(0);
   const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [isFlash, setIsFlash] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [filterMode, setFilterMode] = useState<"bw" | "color">("color");
@@ -26,6 +25,7 @@ export default function CaptureSection({ layout, onComplete }: CaptureSectionPro
   const totalShots = activeLayout;
 
   // 1. Initial Camera Setup & Trigger Loop
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     async function setupCamera() {
       try {
@@ -120,8 +120,6 @@ export default function CaptureSection({ layout, onComplete }: CaptureSectionPro
     if (!videoRef.current || !canvasRef.current || isUploading || phase === "completed") return;
     
     playShutterSound();
-    setIsFlash(true);
-    setTimeout(() => setIsFlash(false), 200);
 
     const canvas = canvasRef.current;
     const video = videoRef.current;
