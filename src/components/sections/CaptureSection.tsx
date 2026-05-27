@@ -290,17 +290,15 @@ export default function CaptureSection({ layout, onComplete }: CaptureSectionPro
   };
 
   const handleCaptureComplete = (photos: string[]) => {
-    if (isMobile) {
-      // On mobile, navigate to the result screen immediately without
-      // blocking on the server upload — the upload flow was causing the
-      // screen to freeze whenever the request was slow or the user wasn't
-      // signed in. sessionId will be null; the user can save to Vault from
-      // the result screen if they want.
-      onComplete({ reveal: true, photos, layout: activeLayout, filter: filterId, theme: themeId });
-      return;
-    }
+    // Always navigate to the result screen immediately. Upload is
+    // best-effort: a 503, 401, or network blip should not block the user
+    // from seeing their captured strip. The sessionId arrives later via
+    // a follow-up navigation if/when the upload succeeds.
     setUploadPhotos(photos);
-    setTimeout(() => { doUpload(photos); }, 1200);
+    onComplete({ reveal: true, photos, layout: activeLayout, filter: filterId, theme: themeId });
+    // Fire the upload in the background. Errors are logged but not surfaced
+    // as a blocking modal — the user already has their strip locally.
+    setTimeout(() => { doUpload(photos).catch((e) => console.error("Background upload failed:", e)); }, 100);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -419,27 +417,8 @@ export default function CaptureSection({ layout, onComplete }: CaptureSectionPro
         )}
       </AnimatePresence>
 
-      {/* Upload Error UI */}
-      <AnimatePresence>
-        {uploadError && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-          >
-            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center">
-              <p className="font-sans text-sm text-zinc-700 mb-6">{uploadError}</p>
-              <button
-                onClick={() => doUpload(uploadPhotos)}
-                className="w-full py-3 bg-[#8C1D24] text-white font-sans text-xs uppercase tracking-widest rounded-lg hover:bg-[#6e161b] transition-colors"
-              >
-                Try Again
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Upload errors are logged silently — navigation already happened,
+          so the user has their strip. No blocking modal. */}
 
       {/* Archiving / Uploading Overlay — shown on mobile too */}
       <AnimatePresence>
