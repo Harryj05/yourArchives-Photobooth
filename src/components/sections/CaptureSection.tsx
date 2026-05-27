@@ -204,7 +204,14 @@ export default function CaptureSection({ layout, onComplete }: CaptureSectionPro
       if (nextShot >= totalShots) {
         // Explicitly set phase to completed to lock further triggers
         setPhase("completed");
-        handleCaptureComplete(newPhotos);
+        // Mobile: navigate immediately (no blocking upload).
+        // Desktop: still goes through handleCaptureComplete → doUpload.
+        const isViewportMobile = typeof window !== "undefined" && window.innerWidth <= 768;
+        if (isMobile || isViewportMobile) {
+          onComplete({ reveal: true, photos: newPhotos, layout: activeLayout, filter: filterId, theme: themeId });
+        } else {
+          handleCaptureComplete(newPhotos);
+        }
       }
     }
   };

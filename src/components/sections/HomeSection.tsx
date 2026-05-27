@@ -1,30 +1,38 @@
 import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image";
 import Button from "@/components/Button";
-import PhotoboothSession from "@/components/PhotoboothSession";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { DEFAULT_THEME_ID, getTheme, type ThemeId } from "@/lib/themes";
+import { DEFAULT_FILTER_ID, getFilter, type FilterId } from "@/lib/filters";
+import { useIsMobile } from "@/hooks/useIsMobile";
+import MobileHome from "@/components/sections/MobileHome";
 
 interface HomeSectionProps {
   onNavigate: (section: string, data?: Record<string, unknown>) => void;
   forceReveal?: boolean;
   capturedPhotos?: string[];
   capturedLayout?: 3 | 4;
-  capturedFilter?: "bw" | "color";
+  capturedFilter?: FilterId;
+  capturedSessionId?: number | null;
+  capturedTheme?: ThemeId;
 }
 
-export default function HomeSection({ 
-  onNavigate, 
+export default function HomeSection({
+  onNavigate,
   forceReveal = false,
   capturedPhotos = [],
   capturedLayout = 3,
-  capturedFilter = "color"
+  capturedFilter = DEFAULT_FILTER_ID,
+  capturedSessionId = null,
+  capturedTheme = DEFAULT_THEME_ID,
 }: HomeSectionProps) {
+  const theme = getTheme(capturedTheme);
+  const photoFilter = getFilter(capturedFilter);
   const [, setIsTriggered] = useState(forceReveal);
-  
+
   // Printing Animation State
   const [isPrinting, setIsPrinting] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_showDownloadModal, _setShowDownloadModal] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSlotDetailOpen, setIsSlotDetailOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -32,8 +40,6 @@ export default function HomeSection({
   useEffect(() => {
     setMounted(true);
   }, []);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_isZoomingToSlot, _setIsZoomingToSlot] = useState(false);
   const [switchState, setSwitchState] = useState<'neutral' | 'collect' | 'print'>('neutral');
 
   // 1. Entrance Animation Trigger (Only if not returning from capture)
@@ -79,21 +85,8 @@ export default function HomeSection({
   const [transitionStage, setTransitionStage] = useState<"landing" | "zooming">("landing");
   const [isCurtainOpen, setIsCurtainOpen] = useState(false);
 
-  // Toggle Switch Actions
-  useEffect(() => {
-    if (switchState === 'collect') {
-      handleDownload();
-      const timer = setTimeout(() => setSwitchState('neutral'), 1000);
-      return () => clearTimeout(timer);
-    } else if (switchState === 'print') {
-      window.print();
-      const timer = setTimeout(() => setSwitchState('neutral'), 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [switchState]);
-
   // Download Logic
-  const handleDownload = async () => {
+  const handleDownload = useCallback(async () => {
     setIsDownloading(true);
     try {
       const canvas = document.createElement("canvas");
@@ -112,13 +105,14 @@ export default function HomeSection({
       canvas.width = CANVAS_WIDTH;
       canvas.height = CANVAS_HEIGHT;
 
-      // Premium Dark-Zinc Background
-      ctx.fillStyle = "#09090b";
+      // Themed background
+      ctx.fillStyle = theme.backgroundColor;
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
       const loadImage = (src: string): Promise<HTMLImageElement> => {
         return new Promise((resolve, reject) => {
-          const img = new Image();
+          // Use window.Image — `Image` in this scope is the next/image component.
+          const img = new window.Image();
           img.crossOrigin = "anonymous";
           img.onload = () => resolve(img);
           img.onerror = reject;
@@ -126,40 +120,111 @@ export default function HomeSection({
         });
       };
 
+      // `object-fit: cover` for canvas — center-crops the source image to
+      // fill the slot without distorting its aspect ratio. Prevents the
+      // squished look that drawImage(img, x, y, w, h) produces when the
+      // photo's native ratio differs from the (square) slot.
+      const drawCover = (
+        image: HTMLImageElement,
+        dx: number,
+        dy: number,
+        dw: number,
+        dh: number,
+      ) => {
+        const imgRatio = image.naturalWidth / image.naturalHeight;
+        const slotRatio = dw / dh;
+        let sx: number, sy: number, sw: number, sh: number;
+        if (imgRatio > slotRatio) {
+          // image is wider than the slot → crop the sides
+          sh = image.naturalHeight;
+          sw = sh * slotRatio;
+          sx = (image.naturalWidth - sw) / 2;
+          sy = 0;
+        } else {
+          // image is taller than the slot → crop top/bottom
+          sw = image.naturalWidth;
+          sh = sw / slotRatio;
+          sx = 0;
+          sy = (image.naturalHeight - sh) / 2;
+        }
+        ctx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh);
+      };
+
       for (let i = 0; i < capturedLayout; i++) {
         if (!capturedPhotos[i]) continue;
         const yPos = PADDING + (i * (PHOTO_HEIGHT + GAP));
-        if (capturedFilter === "bw") {
-          ctx.filter = "grayscale(100%) contrast(1.1)";
-        } else {
-          ctx.filter = "none";
-        }
+        // Filter is already baked into the captured data URL at takeSnapshot
+        // time, so we just draw the photo as-is — but center-cropped to
+        // preserve aspect ratio.
         const img = await loadImage(capturedPhotos[i]);
-        ctx.drawImage(img, PADDING, yPos, INNER_WIDTH, PHOTO_HEIGHT);
-        ctx.filter = "none";
+        drawCover(img, PADDING, yPos, INNER_WIDTH, PHOTO_HEIGHT);
+
+        // Themed border around each photo
+        if (theme.borderWidth > 0) {
+          ctx.lineWidth = theme.borderWidth;
+          ctx.strokeStyle = theme.borderColor;
+          ctx.strokeRect(
+            PADDING + theme.borderWidth / 2,
+            yPos + theme.borderWidth / 2,
+            INNER_WIDTH - theme.borderWidth,
+            PHOTO_HEIGHT - theme.borderWidth,
+          );
+        }
+      }
+
+      // Themed overlay effect
+      if (theme.overlayEffect === "vignette") {
+        const grad = ctx.createRadialGradient(
+          CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_WIDTH * 0.3,
+          CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, CANVAS_WIDTH * 0.75,
+        );
+        grad.addColorStop(0, "rgba(0,0,0,0)");
+        grad.addColorStop(1, "rgba(0,0,0,0.35)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      } else if (theme.overlayEffect === "grain") {
+        ctx.save();
+        ctx.globalAlpha = 0.08;
+        for (let n = 0; n < 1800; n++) {
+          ctx.fillStyle = Math.random() > 0.5 ? "#000" : "#fff";
+          ctx.fillRect(
+            Math.random() * CANVAS_WIDTH,
+            Math.random() * CANVAS_HEIGHT,
+            1, 1,
+          );
+        }
+        ctx.restore();
+      } else if (theme.overlayEffect === "glow") {
+        ctx.save();
+        ctx.shadowColor = theme.accentColor;
+        ctx.shadowBlur = 18;
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = theme.accentColor;
+        ctx.strokeRect(3, 3, CANVAS_WIDTH - 6, CANVAS_HEIGHT - 6);
+        ctx.restore();
       }
 
       const footerY = CANVAS_HEIGHT - (FOOTER_HEIGHT / 2);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      
+
       const text1 = "your";
       const text2 = "Archives";
-      
-      ctx.font = "bold 28px serif";
+
+      ctx.font = `bold 28px ${theme.fontFamily}`;
       const width1 = ctx.measureText(text1).width;
-      ctx.font = "italic 300 28px serif";
+      ctx.font = `italic 300 28px ${theme.fontFamily}`;
       const width2 = ctx.measureText(text2).width;
-      
+
       const totalWidth = width1 + width2;
       const startX = (CANVAS_WIDTH - totalWidth) / 2;
-      
-      ctx.fillStyle = "#a3a3a3"; // Neutral-400
-      ctx.font = "bold 28px serif";
+
+      ctx.fillStyle = theme.fontColor;
+      ctx.font = `bold 28px ${theme.fontFamily}`;
       ctx.fillText(text1, startX + (width1 / 2), footerY);
-      
-      ctx.fillStyle = "#8C1D24"; // Crimson Accent
-      ctx.font = "italic 300 28px serif";
+
+      ctx.fillStyle = theme.accentColor;
+      ctx.font = `italic 300 28px ${theme.fontFamily}`;
       ctx.fillText(text2, startX + width1 + (width2 / 2), footerY);
 
       const dataUrl = canvas.toDataURL("image/png");
@@ -174,18 +239,22 @@ export default function HomeSection({
     } finally {
       setIsDownloading(false);
     }
-  };
+  }, [capturedPhotos, capturedLayout, theme]);
+
+  // Toggle Switch Actions
+  useEffect(() => {
+    if (switchState === "collect") {
+      handleDownload();
+      const timer = setTimeout(() => setSwitchState("neutral"), 1000);
+      return () => clearTimeout(timer);
+    } else if (switchState === "print") {
+      window.print();
+      const timer = setTimeout(() => setSwitchState("neutral"), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [switchState, handleDownload]);
 
   const startTransition = async () => {
-    // 1. Play Shutter Sound (Safely)
-    if (typeof Audio !== 'undefined') {
-      const shutter = new Audio('/sounds/shutter.mp3');
-      shutter.volume = 0.5;
-      shutter.play().catch(() => {
-        console.warn("Shutter sound asset missing or playback blocked. Continuing sequence...");
-      });
-    }
-
     // Phase 1: Open the Velvet Curtain Immediately
     setIsCurtainOpen(true);
 
@@ -202,13 +271,24 @@ export default function HomeSection({
 
   const handleSlotClick = () => {
     if (capturedPhotos.length === 0) return;
-    try {
-      const zoomSound = new Audio('/sounds/zoom.mp3');
-      zoomSound.volume = 0.15;
-      zoomSound.play().catch(() => {});
-    } catch { /* sound not critical */ }
     setIsSlotDetailOpen(true);
   };
+
+  // Viewport-driven swap. The desktop diorama (chamber + curtain + delivery
+  // slot) is far too dense to scale down to a 375 px phone — we render a
+  // clean branded landing instead, and the slot detail overlay (which IS
+  // mobile-friendly) opens via tap on the captured-strip thumbnail.
+  const isMobile = useIsMobile(768);
+
+  if (isMobile && !isSlotDetailOpen) {
+    return (
+      <MobileHome
+        onEnterBooth={() => onNavigate("create", { layout: 3 })}
+        capturedPhotos={capturedPhotos}
+        onOpenSlot={capturedPhotos.length > 0 ? handleSlotClick : undefined}
+      />
+    );
+  }
 
   return (
     <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-transparent">
@@ -234,7 +314,7 @@ export default function HomeSection({
         className="absolute inset-0 flex flex-col items-center justify-center z-10 will-change-transform"
       >
         <div className="absolute inset-0 pointer-events-none opacity-20 mix-blend-overlay film-grain z-0" />
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[600px] gallery-glow pointer-events-none" />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-3/5 aspect-[4/3] gallery-glow pointer-events-none" />
 
         <div className="relative flex flex-col items-center">
           <motion.div
@@ -258,7 +338,7 @@ export default function HomeSection({
                 : "0 80px 160px rgba(0,0,0,0.4)" 
             }}
             transition={{ duration: 0.8 }}
-            className="relative w-[500px] md:w-[780px] aspect-[1.2/1] rounded-[1px] flex overflow-hidden group cursor-default border-t-[4px] border-zinc-200 will-change-transform"
+            className="relative w-[min(95vw,780px)] aspect-[1.2/1] rounded-[1px] flex overflow-hidden group cursor-default border-t-[4px] border-zinc-200 will-change-transform"
           >
             {/* Left Panel: Mirrored Silver with Photo Delivery (More prominent) */}
             <div className="w-[46%] h-full relative flex flex-col items-center py-12 px-2 md:px-6 border-r border-zinc-950/20 shadow-[-10px_0_30px_rgba(0,0,0,0.5)_inset]">
@@ -286,8 +366,8 @@ export default function HomeSection({
               </div>
 
               {/* ── Brushed Metal Plaque ── */}
-              <div 
-                className="w-28 flex flex-col items-center justify-center text-center mt-2 z-20 py-3 px-2"
+              <div
+                className="w-[40%] flex flex-col items-center justify-center text-center mt-2 z-20 py-3 px-2"
                 style={{
                   background: 'linear-gradient(135deg, #e5e5e5 0%, #b8b8b8 100%)',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.7)',
@@ -301,8 +381,8 @@ export default function HomeSection({
                 <div className="mt-1 w-0 h-0 border-l-[5px] border-r-[5px] border-t-[7px] border-l-transparent border-r-transparent border-t-black/70" />
               </div>
 
-              <div 
-                className="mt-2 w-28 h-[180px] relative z-20 p-[10px]"
+              <div
+                className="mt-2 w-[40%] aspect-[7/10] relative z-20 p-[10px]"
                 style={{
                   background: 'linear-gradient(90deg, #f0f0f0 0%, #ffffff 15%, #d0d0d0 85%, #b0b0b0 100%)',
                   boxShadow: '0 10px 30px rgba(0,0,0,0.6), inset 0 1px 2px rgba(255,255,255,0.9)',
@@ -316,16 +396,14 @@ export default function HomeSection({
                   <AnimatePresence>
                     {isPrinting && capturedPhotos.length > 0 && !isSlotDetailOpen && (
                       <motion.div
-                        layoutId="photostrip-element"
-                        initial={{ y: -600, rotateZ: 15, x: 30, opacity: 0 }}
-                        animate={{ y: 52, rotateZ: -25, x: -15, scale: 1, opacity: 1 }}
-                        transition={{ 
-                          duration: 1.8, 
-                          ease: [0.33, 1, 0.68, 1], // Power4 Out for gravity feel
+                        initial={{ y: -300, rotateZ: 15, x: 30, opacity: 0 }}
+                        animate={{ y: 40, rotateZ: -25, x: -15, scale: 1, opacity: 1 }}
+                        exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
+                        transition={{
                           type: "spring",
                           stiffness: 70,
                           damping: 12,
-                          delay: 0.2
+                          delay: 0.6,
                         }}
                         onClick={(e) => { e.stopPropagation(); handleSlotClick(); }}
                         className="absolute w-[32%] p-1 bg-white flex flex-col overflow-hidden cursor-pointer hover:scale-[1.1] z-10"
@@ -335,10 +413,13 @@ export default function HomeSection({
                           {Array.from({ length: capturedLayout }).map((_, i) => (
                             <div key={i} className="relative aspect-square bg-zinc-700/50 overflow-hidden">
                               {capturedPhotos[i] ? (
-                                <img 
-                                  src={capturedPhotos[i]} 
+                                <Image
+                                  src={capturedPhotos[i]}
                                   alt={`Pose ${i + 1}`}
-                                  className={`w-full h-full object-cover ${capturedFilter === 'bw' ? 'grayscale contrast-110' : ''}`}
+                                  fill
+                                  unoptimized
+                                  sizes="120px"
+                                  className="object-cover"
                                 />
                               ) : null}
                             </div>
@@ -376,16 +457,16 @@ export default function HomeSection({
               {/* Internal Textured Wall */}
               <div className="absolute inset-0 bg-[#8C1D24] opacity-90 velvet-curtain" />
               <div className="absolute inset-0 bg-black/40 pointer-events-none" />
-              <div className="absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-black/80 to-transparent z-10 pointer-events-none" />
-              <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-black/80 to-transparent z-10 pointer-events-none" />
+              <div className="absolute inset-y-0 left-0 w-[20%] bg-gradient-to-r from-black/80 to-transparent z-10 pointer-events-none" />
+              <div className="absolute inset-y-0 right-0 w-[20%] bg-gradient-to-l from-black/80 to-transparent z-10 pointer-events-none" />
               
               {/* Realistic Tapered Stool - Tucked to the right, half-visible */}
-              <div className="absolute bottom-[20px] -right-10 w-28 h-40 z-10 flex flex-col items-center scale-90 translate-y-4">
-                <div className="w-20 h-3 bg-gradient-to-b from-zinc-400 via-zinc-200 to-zinc-900 rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.5)] z-20" />
-                <div className="w-3 h-12 bg-gradient-to-r from-zinc-950 via-zinc-800 to-zinc-950 mx-auto -mt-1" />
+              <div className="absolute bottom-[3%] right-[-12%] w-[38%] z-10 flex flex-col items-center">
+                <div className="w-[72%] h-2 bg-gradient-to-b from-zinc-400 via-zinc-200 to-zinc-900 rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.5)] z-20" />
+                <div className="w-[10%] h-[30%] bg-gradient-to-r from-zinc-950 via-zinc-800 to-zinc-950 mx-auto -mt-0.5" style={{ minHeight: '2rem' }} />
                 <div
-                  className="w-20 h-24 bg-[#F4F1EA] mx-auto border-x-2 border-zinc-400 relative"
-                  style={{ 
+                  className="w-[72%] aspect-[5/6] bg-[#F4F1EA] mx-auto border-x-2 border-zinc-400 relative"
+                  style={{
                     clipPath: "polygon(15% 0%, 85% 0%, 100% 100%, 0% 100%)",
                     background: 'linear-gradient(135deg, #F4F1EA 0%, #e0ddd5 100%)',
                     boxShadow: 'inset 0 10px 20px rgba(0,0,0,0.1)'
@@ -464,18 +545,6 @@ export default function HomeSection({
             transition={{ duration: 0.8 }}
             className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden"
           >
-            <div className="absolute top-8 right-8 z-[110]">
-              <button 
-                onClick={() => { setIsSlotDetailOpen(false); setTransitionStage("landing"); }}
-                className="group flex items-center gap-4 bg-white/15 hover:bg-white/25 p-2 pr-6 rounded-full border border-white/20 transition-colors duration-200 active:scale-95 ease-out"
-              >
-                <div className="w-10 h-10 rounded-full bg-zinc-950 flex items-center justify-center text-white scale-90 group-hover:scale-105 transition-transform duration-200 ease-out">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                </div>
-                <span className="font-sans font-bold text-zinc-950 tracking-widest uppercase text-[11px]">Close Chamber</span>
-              </button>
-            </div>
-
             <div className="relative w-full flex flex-col items-center justify-center h-full px-8 md:px-16">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, filter: "blur(8px)" }}
@@ -485,20 +554,21 @@ export default function HomeSection({
                 className="flex flex-col items-center w-full max-w-4xl"
               >
                 {/* ── Main Row: Photostrip (center anchor) + Toggle (right, vertically centered) ── */}
-                <div className="flex flex-row items-center justify-center gap-12 md:gap-16 w-full">
+                {/* On phones the toggle stacks below the strip; on desktop it sits beside it. */}
+                <div className="flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16 w-full">
 
                   {/* ── Photostrip Column (primary center anchor) ── */}
                   <div className="flex flex-col items-center flex-shrink-0">
                     {/* Header — aligned to photostrip center axis */}
                     <div 
-                      className="w-[280px] md:w-[320px] py-6 px-4 mb-4 flex flex-col items-center justify-center text-center border border-zinc-400/50"
+                      className="w-[min(85vw,280px)] md:w-[320px] py-6 px-4 mb-4 flex flex-col items-center justify-center text-center border border-zinc-400/50"
                       style={{
                         background: 'linear-gradient(135deg, #f0f0f0 0%, #d8d8d8 45%, #b0b0b0 55%, #c0c0c0 100%)',
                         boxShadow: '0 6px 24px rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,255,255,0.9)',
                         borderRadius: '2px'
                       }}
                     >
-                      <span className="text-[13px] font-sans font-black text-zinc-900 tracking-[0.35em] leading-tight uppercase">
+                      <span className="text-[16px] font-sans font-black text-zinc-900 tracking-[0.35em] leading-tight uppercase">
                         Photos Delivered Here
                       </span>
                       <div className="w-10 h-[1.5px] bg-zinc-800/20 mt-3 rounded-full" />
@@ -506,8 +576,8 @@ export default function HomeSection({
                     </div>
 
                     {/* Photostrip Box */}
-                    <div 
-                      className="w-[280px] md:w-[320px] h-[480px] md:h-[540px] relative p-3 border-[2px] border-zinc-400 rounded-[4px] flex items-center justify-center cursor-default"
+                    <div
+                      className="w-[min(85vw,280px)] md:w-[320px] h-[min(70vh,480px)] md:h-[540px] relative p-3 border-[2px] border-zinc-400 rounded-[4px] flex items-center justify-center cursor-default"
                       style={{ 
                         background: 'linear-gradient(90deg, #f0f0f0, #ffffff 15%, #d0d0d0 85%, #b0b0b0)',
                         boxShadow: '0 8px 40px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08)'
@@ -523,15 +593,20 @@ export default function HomeSection({
                         }}
                       >
                           <motion.div
-                            layoutId="photostrip-element"
-                            initial={{ opacity: 0, scale: 0.8, rotateX: 5 }}
-                            animate={{ opacity: 1, scale: 1, rotateX: 0 }}
-                            transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                            className="h-[94%] w-auto px-0.5 py-1.5 bg-zinc-950 flex flex-col relative overflow-hidden"
-                            style={{ 
+                            initial={{ y: -350, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1, scale: 1 }}
+                            transition={{
+                              type: "spring",
+                              stiffness: 70,
+                              damping: 16,
+                              mass: 1,
+                              delay: 0.15,
+                            }}
+                            className={`h-[94%] w-auto px-0.5 py-1.5 flex flex-col relative overflow-hidden ${theme.livePreviewClass}`}
+                            style={{
                               aspectRatio: capturedLayout === 3 ? "2/7" : "2/9",
                               boxShadow: '0 20px 60px rgba(0,0,0,0.4), 0 5px 15px rgba(0,0,0,0.2)',
-                              border: '1px solid rgba(255,255,255,0.05)'
+                              border: theme.borderWidth > 0 ? `${Math.max(1, theme.borderWidth / 3)}px solid ${theme.borderColor}` : '1px solid rgba(255,255,255,0.05)',
                             }}
                           >
                           {/* Paper Texture */}
@@ -544,20 +619,27 @@ export default function HomeSection({
                             {Array.from({ length: capturedLayout }).map((_, i) => (
                               <div key={i} className="relative w-full aspect-square bg-zinc-900 overflow-hidden shadow-inner">
                                 {capturedPhotos[i] ? (
-                                  <motion.img 
+                                  // eslint-disable-next-line @next/next/no-img-element -- src is a base64 data URL; next/image does not support data: URIs
+                                  <motion.img
                                     initial={{ opacity: 0, filter: "brightness(2)" }}
                                     animate={{ opacity: 1, filter: "brightness(1)" }}
                                     transition={{ duration: 1.5, delay: 0.4 + (i * 0.1), ease: "easeOut" }}
-                                    src={capturedPhotos[i]} 
-                                    className={`w-full h-full object-cover brightness-[1.05] contrast-[1.1] ${capturedFilter === 'bw' ? 'grayscale contrast-[1.5]' : ''}`}
+                                    src={capturedPhotos[i]}
+                                    className="w-full h-full object-cover brightness-[1.05] contrast-[1.1]"
                                     alt={`Shot ${i + 1}`}
                                   />
                                 ) : null}
                                 <div className="absolute inset-0 bg-gradient-to-tr from-black/5 to-transparent pointer-events-none" />
                               </div>
                             ))}
-                            <div className="mt-auto pt-4 pb-1 w-full flex items-center justify-center font-display text-sm font-bold tracking-tight text-neutral-400">
-                              your<span className="text-[#8C1D24] italic ml-0.5">Archives</span>
+                            <div
+                              className="mt-auto pt-4 pb-1 w-full flex items-center justify-center text-sm font-bold tracking-tight"
+                              style={{ fontFamily: theme.fontFamily, color: theme.fontColor }}
+                            >
+                              your
+                              <span className="italic ml-0.5" style={{ color: theme.accentColor }}>
+                                Archives
+                              </span>
                             </div>
                           </div>
                         </motion.div>
@@ -565,13 +647,51 @@ export default function HomeSection({
                     </div>
 
                     {/* ── Bottom Buttons — strictly centered relative to photostrip box ── */}
-                    <div className="mt-8 flex flex-row items-center justify-center gap-4 w-full">
-                      <Button variant="primary" onClick={handleDownload} disabled={isDownloading} className="px-8 py-4 bg-zinc-950 text-white rounded-xl text-[13px] font-bold uppercase tracking-widest whitespace-nowrap min-w-[160px]">
-                        {isDownloading ? "Generating..." : "Collect Strip"}
-                      </Button>
-                      <Button variant="glow" onClick={() => { setIsSlotDetailOpen(false); setTransitionStage("landing"); }} className="px-8 py-4 bg-[#8C1D24] text-white rounded-xl text-[13px] font-bold uppercase tracking-widest whitespace-nowrap min-w-[160px]">
-                        Retake Photos
-                      </Button>
+                    <div className="mt-8 flex flex-col items-center gap-3 w-full">
+                      <div className="flex flex-row items-center justify-center gap-4 w-full flex-wrap">
+                        <Button variant="primary" onClick={handleDownload} disabled={isDownloading} className="px-8 py-4 bg-zinc-950 text-white rounded-xl text-[13px] font-bold uppercase tracking-widest whitespace-nowrap min-w-[160px]">
+                          {isDownloading ? "Generating..." : "Collect Strip"}
+                        </Button>
+                        <Button variant="primary" onClick={() => { window.location.href = capturedSessionId != null ? "/vault" : "/auth/login?redirect=/vault"; }} className="px-8 py-4 bg-emerald-700 text-white rounded-xl text-[13px] font-bold uppercase tracking-widest whitespace-nowrap min-w-[160px] inline-flex items-center justify-center gap-2">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                          </svg>
+                          Save to Vault
+                        </Button>
+                        <Button variant="glow" onClick={() => { setIsSlotDetailOpen(false); setTransitionStage("landing"); onNavigate("create", { layout: capturedLayout }); }} className="px-8 py-4 bg-[#8C1D24] text-white rounded-xl text-[13px] font-bold uppercase tracking-widest whitespace-nowrap min-w-[160px]">
+                          Retake Photos
+                        </Button>
+                      </div>
+                      <p className="font-sans text-[13px] uppercase tracking-[0.3em] text-zinc-500">
+                        Theme · <span className="text-zinc-900 font-bold">{theme.name}</span>
+                        <span className="mx-2 text-zinc-300">|</span>
+                        Filter · <span className="text-zinc-900 font-bold">{photoFilter.label}</span>
+                      </p>
+                      {capturedSessionId != null && (
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="flex items-center gap-2 font-sans text-[13px] uppercase tracking-[0.3em] text-emerald-700">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 6L9 17l-5-5"/>
+                            </svg>
+                            Saved to Your Vault
+                          </div>
+                          <div className="flex items-center gap-5">
+                            <a
+                              href={`/archive/${capturedSessionId}`}
+                              className="font-sans text-[13px] uppercase tracking-[0.3em] text-zinc-400 hover:text-zinc-900 transition-colors underline-offset-4 hover:underline"
+                            >
+                              View Strip
+                            </a>
+                            <span className="w-px h-4 bg-zinc-300" />
+                            <a
+                              href="/vault"
+                              className="font-sans text-[13px] uppercase tracking-[0.3em] text-zinc-400 hover:text-zinc-900 transition-colors underline-offset-4 hover:underline"
+                            >
+                              Open Vault
+                            </a>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -581,7 +701,7 @@ export default function HomeSection({
                       <div className="flex flex-col items-center gap-8 bg-white/40 py-10 px-8 rounded-[40px] shadow-[0_12px_30px_rgba(0,0,0,0.12)] border-2 border-white/60 backdrop-blur-2xl relative overflow-hidden">
                         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_#fff_0%,_transparent_100%)]" />
                         
-                        <span className={`text-[11px] font-sans font-black tracking-[0.4em] transition-all duration-500 ${switchState === 'collect' ? 'text-zinc-950 scale-110 drop-shadow-md' : 'text-zinc-400'}`}>COLLECT</span>
+                        <span className={`text-[14px] font-sans font-black tracking-[0.4em] transition-all duration-500 ${switchState === 'collect' ? 'text-zinc-950 scale-110 drop-shadow-md' : 'text-zinc-400'}`}>COLLECT</span>
 
                         <div 
                           className="relative w-20 h-32 rounded-[2rem] flex items-center justify-center p-4 shadow-[inset_0_4px_10px_rgba(0,0,0,0.2),_0_4px_10px_rgba(255,255,255,0.7)]"
@@ -617,10 +737,10 @@ export default function HomeSection({
                           </motion.div>
                         </div>
 
-                        <span className={`text-[11px] font-sans font-black tracking-[0.4em] transition-all duration-500 ${switchState === 'print' ? 'text-zinc-950 scale-110 drop-shadow-md' : 'text-zinc-400'}`}>PRINT</span>
+                        <span className={`text-[14px] font-sans font-black tracking-[0.4em] transition-all duration-500 ${switchState === 'print' ? 'text-zinc-950 scale-110 drop-shadow-md' : 'text-zinc-400'}`}>PRINT</span>
                       </div>
                       
-                      <p className="w-40 text-center text-zinc-900 font-sans text-[10px] font-black tracking-[0.3em] uppercase transition-all duration-500 mt-3 drop-shadow-sm">
+                      <p className="w-40 text-center text-zinc-900 font-sans text-[13px] font-black tracking-[0.3em] uppercase transition-all duration-500 mt-3 drop-shadow-sm">
                         Drag Lever
                       </p>
                     </div>
@@ -628,6 +748,19 @@ export default function HomeSection({
                 </div>
               </motion.div>
             </div>
+
+            {/* Close button — rendered last in DOM order so it paints on top of all siblings */}
+            <button
+              type="button"
+              onClick={() => { setIsSlotDetailOpen(false); setTransitionStage("landing"); }}
+              aria-label="Close"
+              className="absolute top-6 right-6 z-[9999] w-12 h-12 rounded-full bg-zinc-950 hover:bg-[#8C1D24] active:scale-90 flex items-center justify-center text-white shadow-xl transition-all duration-150 ease-out focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-zinc-900"
+              style={{ WebkitTapHighlightColor: "transparent", pointerEvents: "auto" }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" style={{ pointerEvents: "none" }}>
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -640,8 +773,14 @@ export default function HomeSection({
             <div className="flex flex-col gap-8 w-full">
               {capturedPhotos.map((photo, i) => (
                 <div key={i} className="relative w-full aspect-square border-[12px] border-white shadow-sm overflow-hidden bg-zinc-50">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={photo} className={`w-full h-full object-cover ${capturedFilter === 'bw' ? 'grayscale contrast-125' : ''}`} alt="" />
+                  <Image
+                    src={photo}
+                    alt=""
+                    fill
+                    unoptimized
+                    sizes="380px"
+                    className="object-cover"
+                  />
                 </div>
               ))}
             </div>

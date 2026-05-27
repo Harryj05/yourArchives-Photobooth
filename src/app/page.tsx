@@ -6,6 +6,8 @@ import HomeSection from "@/components/sections/HomeSection";
 import ExploreSection from "@/components/sections/ExploreSection";
 import AboutSection from "@/components/sections/AboutSection";
 import CaptureSection from "@/components/sections/CaptureSection";
+import { DEFAULT_THEME_ID, type ThemeId } from "@/lib/themes";
+import { DEFAULT_FILTER_ID, type FilterId } from "@/lib/filters";
 
 export default function Home() {
   const [activeSection, setActiveSection] = useState("home");
@@ -14,17 +16,21 @@ export default function Home() {
   // State for captured photos to display on home screen
   const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
   const [capturedLayout, setCapturedLayout] = useState<3 | 4>(3);
-  const [capturedFilter, setCapturedFilter] = useState<"bw" | "color">("color");
+  const [capturedFilter, setCapturedFilter] = useState<FilterId>(DEFAULT_FILTER_ID);
+  const [capturedSessionId, setCapturedSessionId] = useState<number | null>(null);
+  const [capturedTheme, setCapturedTheme] = useState<ThemeId>(DEFAULT_THEME_ID);
   const [isShutterFlashing, setIsShutterFlashing] = useState(false);
   const [shouldReveal, setShouldReveal] = useState(false);
 
   const handleSectionChange = (
-    id: string, 
-    data?: { 
-      layout?: 3 | 4; 
+    id: string,
+    data?: {
+      layout?: 3 | 4;
       reveal?: boolean;
       photos?: string[];
-      filterMode?: "bw" | "color";
+      filter?: FilterId;
+      sessionId?: number;
+      theme?: ThemeId;
     }
   ) => {
     if (id === activeSection) return;
@@ -39,8 +45,14 @@ export default function Home() {
     if (data?.photos) {
       setCapturedPhotos(data.photos);
     }
-    if (data?.filterMode) {
-      setCapturedFilter(data.filterMode);
+    if (data?.filter) {
+      setCapturedFilter(data.filter);
+    }
+    if (data?.sessionId !== undefined) {
+      setCapturedSessionId(data.sessionId);
+    }
+    if (data?.theme) {
+      setCapturedTheme(data.theme);
     }
 
     setIsShutterFlashing(true);
@@ -54,12 +66,14 @@ export default function Home() {
     switch (activeSection) {
       case "home":
         return (
-          <HomeSection 
-            onNavigate={handleSectionChange} 
-            forceReveal={shouldReveal} 
+          <HomeSection
+            onNavigate={handleSectionChange}
+            forceReveal={shouldReveal}
             capturedPhotos={capturedPhotos}
             capturedLayout={capturedLayout}
             capturedFilter={capturedFilter}
+            capturedSessionId={capturedSessionId}
+            capturedTheme={capturedTheme}
           />
         );
       case "explore":

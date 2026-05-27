@@ -11,12 +11,15 @@ export default function PageTransition({ children }: { children: ReactNode }) {
     <AnimatePresence mode="wait" initial={false}>
       <motion.div
         key={pathname}
-        className="w-full h-full"
+        // min-h-full so the photobooth home (which uses absolute positioning)
+        // still gets a full-viewport container, while scrollable pages can
+        // grow taller and render the footer beneath their content.
+        className="w-full min-h-full"
         initial={{ opacity: 1, y: 0 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 5, filter: "blur(4px)" }}
-        transition={{ 
-          duration: 0.4, 
+        transition={{
+          duration: 0.4,
           ease: "easeInOut"
         }}
       >

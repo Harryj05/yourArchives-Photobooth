@@ -19,13 +19,15 @@ export default function AboutSection() {
           {/* Soft ambient glow behind image */}
           <div className="absolute inset-x-4 -inset-y-4 bg-zinc-300/30 rounded-full blur-2xl z-0" />
           
-          <div className="relative w-full h-full rounded-[2rem] overflow-hidden z-10"
-               style={{
-                 boxShadow: '0 4px 20px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.03)',
-                 border: '1px solid rgba(255,255,255,0.4)',
-               }}>
-            <Image 
-              src="/images/oshi.jpg" 
+          <div
+            className="relative w-full h-full rounded-[2rem] overflow-hidden z-10"
+            style={{
+              boxShadow: '0 4px 20px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.03)',
+              border: '1px solid rgba(255,255,255,0.4)',
+            }}
+          >
+            <Image
+              src="/images/oshi.jpg"
               alt="Oshi Jain"
               priority
               fill
