@@ -364,6 +364,16 @@ export default function CaptureSection({ layout, onComplete }: CaptureSectionPro
     isUploading,
     facingMode,
     setFacingMode,
+    onDone: () => {
+      // MobileCapture's result view tapped "Continue" — hand off to parent.
+      onComplete({
+        reveal: true,
+        photos: capturedPhotos,
+        layout: activeLayout,
+        filter: filterId,
+        theme: themeId,
+      });
+    },
   };
 
   // Overlays and modals that must render on BOTH mobile and desktop.

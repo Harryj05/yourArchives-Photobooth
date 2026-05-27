@@ -1,9 +1,9 @@
 "use client";
 
-import { RefObject } from "react";
+import { RefObject, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PHOTO_FILTERS, type FilterId, getFilter } from "@/lib/filters";
-import { STRIP_THEMES, type ThemeId } from "@/lib/themes";
+import { STRIP_THEMES, type ThemeId, getTheme } from "@/lib/themes";
 
 /**
  * Shape of the shared state passed from <CaptureSection>. Mirrors the return
@@ -34,6 +34,12 @@ export interface PhotoboothState {
   isUploading: boolean;
   facingMode: "user" | "environment";
   setFacingMode: (m: "user" | "environment") => void;
+  /**
+   * Called after the user reviews the captured strip and taps "Continue".
+   * MobileCapture owns the result-screen presentation; the parent just
+   * navigates when this fires.
+   */
+  onDone?: () => void;
 }
 
 /**
@@ -43,6 +49,112 @@ export interface PhotoboothState {
  */
 export default function MobileCapture({ state }: { state: PhotoboothState }) {
   const filter = getFilter(state.filterId);
+  const theme = getTheme(state.themeId);
+  const [hasReviewed, setHasReviewed] = useState(false);
+
+  // ── Result view: blurred backdrop + photostrip preview ──
+  // Renders as soon as the user has finished capturing all shots, so the
+  // user never gets stuck on the live camera. The Continue button hands
+  // control back to the parent via onDone.
+  const isCaptureComplete = state.capturedPhotos.length >= state.totalShots;
+
+  if (isCaptureComplete && !hasReviewed) {
+    return (
+      <div className="fixed inset-0 z-[200] flex flex-col items-center justify-between overflow-hidden">
+        {/* Blurred camera backdrop */}
+        <div className="absolute inset-0">
+          <video
+            ref={state.videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-50 ${
+              state.facingMode === "user" ? "scale-x-[-1]" : ""
+            }`}
+          />
+          <canvas ref={state.canvasRef} className="hidden" />
+          <div className="absolute inset-0 bg-zinc-950/80" />
+        </div>
+
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="relative z-10 pt-16 pb-4 text-center px-6"
+        >
+          <p className="font-sans text-[11px] uppercase tracking-[0.4em] text-[#8C1D24] mb-2">
+            Your Strip
+          </p>
+          <h2 className="font-display text-3xl font-bold text-white tracking-tight">
+            Looking <span className="italic font-normal text-[#8C1D24]">good</span>
+          </h2>
+        </motion.div>
+
+        {/* Photostrip preview */}
+        <motion.div
+          initial={{ opacity: 0, y: 40, scale: 0.92 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 flex-1 flex items-center justify-center w-full px-8 py-4"
+        >
+          <div
+            className={`relative w-[55vw] max-w-[220px] flex flex-col gap-1 p-2 ${theme.livePreviewClass}`}
+            style={{
+              aspectRatio: state.totalShots === 3 ? "2/7" : "2/9",
+              boxShadow: "0 30px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)",
+              border: theme.borderWidth > 0 ? `${Math.max(1, theme.borderWidth / 4)}px solid ${theme.borderColor}` : undefined,
+            }}
+          >
+            {state.capturedPhotos.map((src, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 + i * 0.18, duration: 0.5 }}
+                className="relative flex-1 overflow-hidden bg-zinc-900"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- base64 data URL */}
+                <img src={src} alt={`Shot ${i + 1}`} className="absolute inset-0 w-full h-full object-cover" />
+              </motion.div>
+            ))}
+            <div
+              className="pt-1 text-center text-[6px] font-bold tracking-tight"
+              style={{ fontFamily: theme.fontFamily, color: theme.fontColor }}
+            >
+              your<span className="italic ml-0.5" style={{ color: theme.accentColor }}>Archives</span>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Action buttons */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 1.1 }}
+          className="relative z-10 w-full px-6 pb-[max(env(safe-area-inset-bottom),24px)] pt-4 flex flex-col gap-3"
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setHasReviewed(true);
+              state.onDone?.();
+            }}
+            className="w-full py-4 bg-[#8C1D24] text-white font-sans text-[13px] uppercase tracking-[0.3em] font-bold rounded-2xl shadow-[0_8px_24px_rgba(140,29,36,0.5)] active:scale-[0.98] transition-transform"
+          >
+            Continue
+          </button>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="w-full py-3 bg-white/10 backdrop-blur-md text-white/80 font-sans text-[11px] uppercase tracking-[0.3em] rounded-2xl border border-white/15 active:scale-[0.98] transition-transform"
+          >
+            Retake
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   // Pre-capture: error / permission UI
   if (state.error || state.permissionDenied) {
