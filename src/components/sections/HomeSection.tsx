@@ -291,9 +291,9 @@ export default function HomeSection({
   }
 
   return (
-    <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-transparent">
+    <div className="relative w-full h-full flex flex-col items-center justify-center overflow-y-auto overflow-x-hidden bg-transparent py-4">
       {/* Cinematic Vignette Overlay */}
-      <motion.div 
+      <motion.div
         animate={{ opacity: transitionStage === "zooming" ? 1 : 0 }}
         className="absolute inset-0 cinematic-vignette opacity-0 z-[60] pointer-events-none"
       />
@@ -338,7 +338,7 @@ export default function HomeSection({
                 : "0 80px 160px rgba(0,0,0,0.4)" 
             }}
             transition={{ duration: 0.8 }}
-            className="relative w-[min(92vw,780px,70vh)] aspect-[1.2/1] rounded-[1px] flex overflow-hidden group cursor-default border-t-[4px] border-zinc-200 will-change-transform"
+            className="relative w-[min(85vw,640px,55vh)] aspect-[1.2/1] rounded-[1px] flex overflow-hidden group cursor-default border-t-[4px] border-zinc-200 will-change-transform"
           >
             {/* Left Panel: Mirrored Silver with Photo Delivery (More prominent) */}
             <div className="w-[46%] h-full relative flex flex-col items-center py-12 px-2 md:px-6 border-r border-zinc-950/20 shadow-[-10px_0_30px_rgba(0,0,0,0.5)_inset]">

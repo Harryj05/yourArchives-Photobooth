@@ -93,7 +93,7 @@ export default function Home() {
   };
 
   return (
-    <main className="absolute inset-0 w-full h-full overflow-hidden bg-transparent select-none">
+    <main className="absolute inset-0 w-full h-full overflow-y-auto overflow-x-hidden bg-transparent select-none">
 
       {/* Shutter Flash Effect - White Flash */}
       <AnimatePresence>
@@ -119,7 +119,7 @@ export default function Home() {
               transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
               className="absolute inset-0 w-full h-full flex items-center justify-center"
             >
-              <div className="w-full h-full relative overflow-hidden flex items-center justify-center">
+              <div className="w-full h-full relative overflow-y-auto overflow-x-hidden flex items-center justify-center">
                  {renderSection()}
               </div>
             </motion.div>
