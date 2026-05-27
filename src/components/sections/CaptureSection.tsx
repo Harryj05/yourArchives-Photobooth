@@ -18,8 +18,8 @@ export default function CaptureSection({ layout, onComplete }: CaptureSectionPro
   const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadPhotos, setUploadPhotos] = useState<string[]>([]);
+  const [, setUploadError] = useState<string | null>(null);
+  const [, setUploadPhotos] = useState<string[]>([]);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   /**
