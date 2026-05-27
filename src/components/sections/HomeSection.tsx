@@ -322,8 +322,8 @@ export default function HomeSection({
             animate={{ opacity: 1, y: 0 }}
             className="mb-[1px] relative z-20"
           >
-            <div className="photos-sign-retro px-16 py-4 flex items-center justify-center">
-              <div className="font-sans text-3xl md:text-5xl font-[1000] tracking-[-0.04em] px-8 leading-none border-x-[10px] border-zinc-950 flex items-center justify-center">
+            <div className="photos-sign-retro px-10 md:px-16 py-2 md:py-3 flex items-center justify-center">
+              <div className="font-sans text-2xl md:text-4xl font-[1000] tracking-[-0.04em] px-6 md:px-8 leading-none border-x-[8px] md:border-x-[10px] border-zinc-950 flex items-center justify-center">
                 <span className="text-[#8C1D24] uppercase">PHOTOBOOTH</span>
               </div>
             </div>
@@ -338,7 +338,7 @@ export default function HomeSection({
                 : "0 80px 160px rgba(0,0,0,0.4)" 
             }}
             transition={{ duration: 0.8 }}
-            className="relative w-[min(95vw,780px)] aspect-[1.2/1] rounded-[1px] flex overflow-hidden group cursor-default border-t-[4px] border-zinc-200 will-change-transform"
+            className="relative w-[min(92vw,780px,70vh)] aspect-[1.2/1] rounded-[1px] flex overflow-hidden group cursor-default border-t-[4px] border-zinc-200 will-change-transform"
           >
             {/* Left Panel: Mirrored Silver with Photo Delivery (More prominent) */}
             <div className="w-[46%] h-full relative flex flex-col items-center py-12 px-2 md:px-6 border-r border-zinc-950/20 shadow-[-10px_0_30px_rgba(0,0,0,0.5)_inset]">
@@ -511,14 +511,14 @@ export default function HomeSection({
             </div>
           </motion.div>
 
-          <div className="mt-12 h-20 flex items-center justify-center">
+          <div className="mt-6 md:mt-8 h-16 flex items-center justify-center">
             <AnimatePresence mode="wait">
               {capturedPhotos.length === 0 && (
                 <motion.div key="enter-booth" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  <Button 
-                    variant="glow" 
-                    onClick={startTransition} 
-                    className="group relative px-12 py-5 text-xl bg-[#8C1D24] hover:bg-[#4A0F14] shadow-2xl tracking-[0.2em] uppercase font-bold overflow-hidden"
+                  <Button
+                    variant="glow"
+                    onClick={startTransition}
+                    className="group relative px-10 py-4 text-base md:text-lg bg-[#8C1D24] hover:bg-[#4A0F14] shadow-2xl tracking-[0.2em] uppercase font-bold overflow-hidden"
                   >
                     {/* Animated Shimmer Overlay */}
                     <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-shimmer pointer-events-none" />
