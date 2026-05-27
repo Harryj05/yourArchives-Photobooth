@@ -38,6 +38,8 @@ export default function CaptureSection({ layout, onComplete }: CaptureSectionPro
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Declared early so handleCaptureComplete can use it.
+  const isMobile = useIsMobile(768);
 
   const totalShots = activeLayout;
 
@@ -281,6 +283,15 @@ export default function CaptureSection({ layout, onComplete }: CaptureSectionPro
   };
 
   const handleCaptureComplete = (photos: string[]) => {
+    if (isMobile) {
+      // On mobile, navigate to the result screen immediately without
+      // blocking on the server upload — the upload flow was causing the
+      // screen to freeze whenever the request was slow or the user wasn't
+      // signed in. sessionId will be null; the user can save to Vault from
+      // the result screen if they want.
+      onComplete({ reveal: true, photos, layout: activeLayout, filter: filterId, theme: themeId });
+      return;
+    }
     setUploadPhotos(photos);
     setTimeout(() => { doUpload(photos); }, 1200);
   };
@@ -321,7 +332,7 @@ export default function CaptureSection({ layout, onComplete }: CaptureSectionPro
   // Viewport-based UI swap. Both branches share the same useState graph
   // above, so neither the desktop diorama nor the mobile UI duplicates
   // logic — they are presentational layers over a single state source.
-  const isMobile = useIsMobile(768);
+  // (isMobile is declared near the top so handleCaptureComplete can use it.)
 
   const mobileState: PhotoboothState = {
     phase,
